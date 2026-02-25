@@ -1,0 +1,108 @@
+# --- 1. 创建虚拟 CSV 数据（模拟仅有一列的离散数据）---
+set.seed(42) # 设置种子确保结果可复现
+# 模拟服从正态分布的离散数据（例如分数，并限制在 5 到 25 之间）
+data_points <- round(rnorm(500, mean = 15, sd = 3))
+data_points[data_points < 5] <- 5
+data_points[data_points > 25] <- 25
+
+# 创建一个仅有一列的数据框
+df_test <- data.frame(Value = data_points)
+test_csv_filename <- "rdata.csv"
+
+# 导出到 CSV 文件
+#write_csv(df_test, test_csv_filename, col_names = FALSE)
+cat("已创建测试文件：", test_csv_filename, "\n")
+# ----------------------------------------------------------------
+
+plot_discrete_bar_with_normal_fit <- function(csv_file_path) {
+  
+  # 检查文件是否存在
+  if (!file.exists(csv_file_path)) {
+    stop(paste("错误：文件 '", csv_file_path, "' 不存在。", sep = ""))
+  }
+  
+  # --- 2. 导入和数据处理 ---
+  # 导入数据（假设没有列名，仅一列）
+  data <- read_csv(csv_file_path, col_names = FALSE)
+  
+  # 将列名改为 'Value'
+  colnames(data) <- c("Value")
+  
+  # 计算离散值的频率 (Counts) 和概率 (Probabilities)
+  # 使用 dplyr 进行分组和汇总
+  df_summary <- data %>%
+    drop_na() %>% # 移除缺失值
+    group_by(Value) %>%
+    summarise(Count = n(), .groups = 'drop') %>%
+    ungroup() %>%
+    mutate(Probability = Count / sum(Count)) # 计算每个值的概率
+  
+  # --- 3. 计算正态分布参数 ---
+  original_data <- data$Value
+  mu <- mean(original_data)
+  sigma <- sd(original_data)
+  
+  # 创建用于绘制正态曲线的数据点
+  x_range <- seq(min(original_data), max(original_data), length.out = 100)
+  
+  # 计算概率密度函数 (PDF)
+  df_curve <- data.frame(
+    x = x_range,
+    # 计算 PDF 值
+    pdf = dnorm(x_range, mean = mu, sd = sigma)
+  )
+  
+  # --- 4. 绘图 (使用 ggplot2) ---
+  
+  # 为了让曲线和柱形图在 Y 轴上比例协调，我们需要对 PDF 进行缩放。
+  # 缩放因子：将最大柱高（概率）除以最大 PDF 值。
+  # PDF 最大的点在均值处
+  max_pdf <- dnorm(mu, mu, sigma)
+  max_prob <- max(df_summary$Probability)
+  scale_factor <- max_prob / max_pdf
+  
+  # 绘制图表
+  p <- ggplot() +
+    
+    # 绘制柱形图（Bar Chart）
+    # geom_col() 用于绘制分类柱形图，其高度由 Probability 决定
+    geom_col(
+      data = df_summary, 
+      aes(x = Value, y = Probability), 
+      fill = "skyblue", 
+      color = "darkblue", # 柱子边框颜色
+      width = 0.6,        # 控制柱子宽度（步长），调小为 0.6
+      alpha = 0.8
+    ) +
+    
+    # 叠加正态分布拟合曲线
+    geom_line(
+      data = df_curve, 
+      aes(x = x, y = pdf * scale_factor), # 应用缩放因子
+      color = "red", 
+      linewidth = 1.2
+    ) +
+    
+    # 添加统计信息和标题
+    labs(
+      title = "离散数据概率分布与正态拟合曲线",
+      subtitle = paste0(
+        "拟合参数: \u03bc = ", round(mu, 2), " (均值), \u03c3 = ", round(sigma, 2), " (标准差)"
+      ),
+      x = "离散数值",
+      y = "概率"
+    ) +
+    
+    # 美化主题
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5)
+    )
+  
+  # 打印图表
+  print(p)
+}
+
+# --- 5. 执行函数 ---
+plot_discrete_bar_with_normal_fit("C:/Users/Aphro/Desktop/general physics 1/lab1"+test_csv_filename)
